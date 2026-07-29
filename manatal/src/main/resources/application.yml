@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: manatal-migration
+
+    profiles:
+        active: dev
+
+migration:
+  manatal:
+    token: ${MANATAL_TOKEN}
+    base-url: https://api.manatal.com/open/v3/
+    page-size: 100
+
+app:
+  base-url: http://localhost:8080
+
