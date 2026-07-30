@@ -17,16 +17,16 @@ public class GlobalExceptionHandler {
 );
     }
 
-    public ResponseEntity<ErrorResponse> handleRateLimitException(RateLimitException ex) {
+    @ExceptionHandler(RateLimitException.class)
+    public ResponseEntity<ErrorResponse> handleRateLimit(RateLimitException ex) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                .body(new ErrorResponse(429, "Rate limit exceeded. Please try again."));
-
+                .body(new ErrorResponse(429, ex.getMessage()));
     }
 
+    @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse(500, "Rate limit exceeded. Please try again."));
-
+                .body(new ErrorResponse(500, "Internal server error"));
     }
 
 }

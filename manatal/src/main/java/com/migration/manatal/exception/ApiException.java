@@ -15,6 +15,12 @@ public class ApiException extends RuntimeException {
         this.responseBody = responseBody;
     }
 
+    public ApiException(HttpStatus status, String responseBody, Throwable cause) {
+        super(responseBody, cause);
+        this.status = status;
+        this.responseBody = responseBody;
+    }
+
     public static ApiException notFound(String detail) {
         return new ApiException(HttpStatus.NOT_FOUND, detail);
     }
@@ -23,6 +29,8 @@ public class ApiException extends RuntimeException {
         return new ApiException(HttpStatus.BAD_GATEWAY, detail);
     }
 
-
+    public static ApiException badGateway(String detail, Throwable cause) {
+        return new ApiException(HttpStatus.BAD_GATEWAY, detail, cause);
+    }
 
 }
