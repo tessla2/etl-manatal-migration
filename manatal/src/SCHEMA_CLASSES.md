@@ -1732,10 +1732,11 @@ public class FileStorageService {
 package com.migration.manatal.service;
 
 import com.migration.manatal.entity.enums.EntityType;
-import com.migration.manatal.repository.*;
+import com.migration.manatal.repository.client.ClientMigrationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -1752,25 +1753,25 @@ public class ReportService {
     public Map<String, Object> generateReport() {
         Map<String, Object> report = new HashMap<>();
         report.put("clients", Map.of(
-            "total", clientRepo.count(),
-            "success", clientRepo.findByStatus(
-                com.migration.manatal.entity.enums.MigrationStatus.SUCESSO).size(),
-            "errors", clientRepo.findByStatus(
-                com.migration.manatal.entity.enums.MigrationStatus.ERRO).size()
+                "total", clientRepo.count(),
+                "success", clientRepo.findByStatus(
+                        com.migration.manatal.entity.enums.MigrationStatus.SUCESSO).size(),
+                "errors", clientRepo.findByStatus(
+                        com.migration.manatal.entity.enums.MigrationStatus.ERRO).size()
         ));
         report.put("jobs", Map.of(
-            "total", jobRepo.count(),
-            "success", jobRepo.findByStatus(
-                com.migration.manatal.entity.enums.MigrationStatus.SUCESSO).size(),
-            "errors", jobRepo.findByStatus(
-                com.migration.manatal.entity.enums.MigrationStatus.ERRO).size()
+                "total", jobRepo.count(),
+                "success", jobRepo.findByStatus(
+                        com.migration.manatal.entity.enums.MigrationStatus.SUCESSO).size(),
+                "errors", jobRepo.findByStatus(
+                        com.migration.manatal.entity.enums.MigrationStatus.ERRO).size()
         ));
         report.put("candidates", Map.of(
-            "total", candidateRepo.count(),
-            "success", candidateRepo.findByStatus(
-                com.migration.manatal.entity.enums.MigrationStatus.SUCESSO).size(),
-            "errors", candidateRepo.findByStatus(
-                com.migration.manatal.entity.enums.MigrationStatus.ERRO).size()
+                "total", candidateRepo.count(),
+                "success", candidateRepo.findByStatus(
+                        com.migration.manatal.entity.enums.MigrationStatus.SUCESSO).size(),
+                "errors", candidateRepo.findByStatus(
+                        com.migration.manatal.entity.enums.MigrationStatus.ERRO).size()
         ));
         return report;
     }
@@ -1887,7 +1888,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.migration.manatal.model.source.SourceClient;
 import com.migration.manatal.model.target.TargetClient;
-import com.migration.manatal.transform.ClientMapper;
+import com.migration.manatal.transform.client.ClientMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.item.ItemProcessor;
@@ -1917,12 +1918,13 @@ package com.migration.manatal.batch.client;
 import com.migration.manatal.entity.ClientMigration;
 import com.migration.manatal.entity.enums.MigrationStatus;
 import com.migration.manatal.model.target.TargetClient;
-import com.migration.manatal.repository.ClientMigrationRepository;
+import com.migration.manatal.repository.client.ClientMigrationRepository;
 import com.migration.manatal.service.ManatalTargetService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.stereotype.Component;
+
 import java.util.List;
 
 @Slf4j
@@ -1941,20 +1943,20 @@ public class ClientItemWriter implements ItemWriter<TargetClient> {
                 String targetId = response.has("id") ? response.get("id").asText() : "unknown";
 
                 repository.save(ClientMigration.builder()
-                    .sourceClientId("pending")  // precisa do sourceId do context
-                    .targetClientId(targetId)
-                    .status(MigrationStatus.SUCESSO)
-                    .attempt(1)
-                    .build());
+                        .sourceClientId("pending")  // precisa do sourceId do context
+                        .targetClientId(targetId)
+                        .status(MigrationStatus.SUCESSO)
+                        .attempt(1)
+                        .build());
 
                 log.info("Client created: {}", targetId);
             } catch (Exception e) {
                 log.error("Failed to create client: {}", e.getMessage());
                 repository.save(ClientMigration.builder()
-                    .status(MigrationStatus.ERRO)
-                    .errorMessage(e.getMessage())
-                    .attempt(1)
-                    .build());
+                        .status(MigrationStatus.ERRO)
+                        .errorMessage(e.getMessage())
+                        .attempt(1)
+                        .build());
             }
         }
     }
@@ -2040,7 +2042,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.migration.manatal.model.source.SourceJob;
 import com.migration.manatal.model.target.TargetJob;
-import com.migration.manatal.repository.ClientMigrationRepository;
+import com.migration.manatal.repository.client.ClientMigrationRepository;
 import com.migration.manatal.transform.JobMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -2670,9 +2672,11 @@ package com.migration.manatal.transform;
 
 import com.migration.manatal.model.source.SourceClient;
 import com.migration.manatal.model.target.TargetClient;
+import com.migration.manatal.transform.client.ClientMapper;
 import com.migration.manatal.transform.utils.ParseUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class ClientMapperTest {
@@ -2687,8 +2691,8 @@ class ClientMapperTest {
     @Test
     void shouldMapSourceToTarget() {
         SourceClient source = new SourceClient(
-            "123", "Acme Corp", "John Doe", "john@acme.com",
-            "+551199999999", "Rua A, 123", "Tech", "VIP Client", null
+                "123", "Acme Corp", "John Doe", "john@acme.com",
+                "+551199999999", "Rua A, 123", "Tech", "VIP Client", null
         );
 
         TargetClient target = mapper.toTarget(source);
@@ -2710,7 +2714,7 @@ class ClientMapperTest {
     @Test
     void shouldHandleBlankFields() {
         SourceClient source = new SourceClient(
-            "123", null, "", "  ", null, null, null, null, null
+                "123", null, "", "  ", null, null, null, null, null
         );
         TargetClient target = mapper.toTarget(source);
         assertNotNull(target);
@@ -2980,12 +2984,14 @@ package com.migration.manatal.repository;
 
 import com.migration.manatal.entity.ClientMigration;
 import com.migration.manatal.entity.enums.MigrationStatus;
+import com.migration.manatal.repository.client.ClientMigrationRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
-import java.time.LocalDateTime;
+
 import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 @DataJpaTest
@@ -2998,11 +3004,11 @@ class ClientMigrationRepositoryTest {
     @Test
     void shouldSaveAndFindBySourceClientId() {
         ClientMigration entity = ClientMigration.builder()
-            .sourceClientId("src-123")
-            .targetClientId("tgt-456")
-            .status(MigrationStatus.SUCESSO)
-            .attempt(1)
-            .build();
+                .sourceClientId("src-123")
+                .targetClientId("tgt-456")
+                .status(MigrationStatus.SUCESSO)
+                .attempt(1)
+                .build();
 
         repository.save(entity);
 
@@ -3014,9 +3020,9 @@ class ClientMigrationRepositoryTest {
     @Test
     void shouldFindByStatus() {
         repository.save(ClientMigration.builder()
-            .sourceClientId("s1").status(MigrationStatus.ERRO).attempt(1).build());
+                .sourceClientId("s1").status(MigrationStatus.ERRO).attempt(1).build());
         repository.save(ClientMigration.builder()
-            .sourceClientId("s2").status(MigrationStatus.SUCESSO).attempt(1).build());
+                .sourceClientId("s2").status(MigrationStatus.SUCESSO).attempt(1).build());
 
         assertEquals(1, repository.findByStatus(MigrationStatus.ERRO).size());
         assertEquals(1, repository.findByStatus(MigrationStatus.SUCESSO).size());
@@ -3025,7 +3031,7 @@ class ClientMigrationRepositoryTest {
     @Test
     void shouldCheckExistsBySourceClientIdAndStatus() {
         repository.save(ClientMigration.builder()
-            .sourceClientId("s1").status(MigrationStatus.SUCESSO).attempt(1).build());
+                .sourceClientId("s1").status(MigrationStatus.SUCESSO).attempt(1).build());
 
         assertTrue(repository.existsBySourceClientIdAndStatus("s1", MigrationStatus.SUCESSO));
         assertFalse(repository.existsBySourceClientIdAndStatus("s1", MigrationStatus.ERRO));
@@ -3212,7 +3218,6 @@ package com.migration.manatal.batch.integration;
 
 import com.migration.manatal.entity.ClientMigration;
 import com.migration.manatal.entity.enums.MigrationStatus;
-import com.migration.manatal.repository.ClientMigrationRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.batch.core.*;
 import org.springframework.batch.test.JobLauncherTestUtils;
@@ -3221,7 +3226,9 @@ import org.springframework.batch.test.context.SpringBatchTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+
 import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBatchTest
@@ -3236,13 +3243,13 @@ class ClientMigrationJobIntegrationTest {
     private JobRepositoryTestUtils jobRepositoryTestUtils;
 
     @Autowired
-    private ClientMigrationRepository repository;
+    private com.migration.manatal.repository.client.ClientMigrationRepository repository;
 
     @Test
     void shouldLaunchClientMigrationJob() throws Exception {
         JobParameters params = new JobParametersBuilder()
-            .addLong("time", System.currentTimeMillis())
-            .toJobParameters();
+                .addLong("time", System.currentTimeMillis())
+                .toJobParameters();
 
         // Configurar mocks para Source/Target services antes de rodar
         JobExecution execution = jobLauncherTestUtils.launchJob("clientMigrationJob", params);

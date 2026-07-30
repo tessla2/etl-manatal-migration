@@ -7,9 +7,13 @@ spring:
 
 migration:
   manatal:
-    token: ${MANATAL_TOKEN}
+    source:
+      token: ${MANATAL_TOKEN:}
+    target:
+      token: ${MANATAL_TARGET_TOKEN:}
     base-url: https://api.manatal.com/open/v3/
     page-size: 100
+    rate-limit-retry-seconds: 60
 
 app:
   base-url: http://localhost:8080
