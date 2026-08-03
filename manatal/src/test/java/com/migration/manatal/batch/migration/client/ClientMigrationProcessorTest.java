@@ -3,7 +3,7 @@ package com.migration.manatal.batch.migration.client;
 import com.migration.manatal.entity.client.ClientMigration;
 import com.migration.manatal.model.client.ClientTarget;
 import com.migration.manatal.service.client.ManatalSourceClientService;
-import com.migration.manatal.transform.client.ClientMapper;
+import com.migration.manatal.transform.ClientMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

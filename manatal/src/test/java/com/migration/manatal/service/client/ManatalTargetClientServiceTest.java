@@ -97,4 +97,32 @@ class ManatalTargetClientServiceTest {
         var ex = assertThrows(ApiException.class, () -> service.migrateOrganization(target));
         assertEquals(502, ex.getStatus().value());
     }
+
+    @Test
+    void shouldCreateOrganizationNote() throws Exception {
+        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(httpResponse);
+        when(httpResponse.statusCode()).thenReturn(201);
+        when(httpResponse.body()).thenReturn("{\"id\": 99}");
+
+        var result = service.createOrganizationNote(42, "hello note");
+
+        assertEquals("{\"id\": 99}", result);
+    }
+
+    @Test
+    void shouldCreateContact() throws Exception {
+        var contact = new ClientTarget.ContactTarget();
+        contact.setFullName("John Doe");
+        contact.setOrganization(42L);
+
+        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(httpResponse);
+        when(httpResponse.statusCode()).thenReturn(201);
+        when(httpResponse.body()).thenReturn("{\"id\": 7}");
+
+        var result = service.createContact(contact);
+
+        assertEquals("{\"id\": 7}", result);
+    }
 }

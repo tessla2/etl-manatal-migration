@@ -1888,7 +1888,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.migration.manatal.model.source.SourceClient;
 import com.migration.manatal.model.target.TargetClient;
-import com.migration.manatal.transform.client.ClientMapper;
+import com.migration.manatal.transform.ClientMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.item.ItemProcessor;
@@ -2672,7 +2672,6 @@ package com.migration.manatal.transform;
 
 import com.migration.manatal.model.source.SourceClient;
 import com.migration.manatal.model.target.TargetClient;
-import com.migration.manatal.transform.client.ClientMapper;
 import com.migration.manatal.transform.utils.ParseUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

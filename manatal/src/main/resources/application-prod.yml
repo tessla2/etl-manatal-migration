@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  batch:
+    job:
+      enabled: false
+
+migration:
+  batch:
+    chunk-size: 50
+    retry-limit: 3
+    skip-limit: 10

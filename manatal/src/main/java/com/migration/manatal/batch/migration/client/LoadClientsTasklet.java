@@ -41,8 +41,8 @@ public class LoadClientsTasklet implements Tasklet {
             }
 
             for (JsonNode org : results) {
-                String id = org.path("id").asText();
-                String name = org.path("name").asText("");
+                String id = org.path("id").asString();
+                String name = org.path("name").asString("");
 
                 if (repository.findBySourceOrganizationId(id).isEmpty()) {
                     ClientMigration entity = new ClientMigration();

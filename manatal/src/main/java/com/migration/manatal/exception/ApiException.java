@@ -21,8 +21,16 @@ public class ApiException extends RuntimeException {
         this.responseBody = responseBody;
     }
 
+    public boolean isRetryable() {
+        return status == HttpStatus.TOO_MANY_REQUESTS || status.is5xxServerError();
+    }
+
     public static ApiException notFound(String detail) {
         return new ApiException(HttpStatus.NOT_FOUND, detail);
+    }
+
+    public static ApiException badRequest(String detail) {
+        return new ApiException(HttpStatus.BAD_REQUEST, detail);
     }
 
     public static ApiException badGateway(String detail) {

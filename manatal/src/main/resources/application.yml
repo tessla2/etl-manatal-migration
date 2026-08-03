@@ -2,8 +2,12 @@ spring:
   application:
     name: manatal-migration
 
-    profiles:
-        active: dev
+  profiles:
+    active: dev
+
+  batch:
+    job:
+      enabled: false
 
 migration:
   manatal:

@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/company-source")
 @RequiredArgsConstructor
-public class CompanySourceController {
+public class CompanySourceClientController {
 
     private final ManatalSourceClientService service;
 

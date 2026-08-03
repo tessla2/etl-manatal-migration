@@ -1,12 +1,13 @@
 package com.migration.manatal.service.client;
 
 import com.migration.manatal.exception.ApiException;
+import com.migration.manatal.exception.NonRetryableApiException;
 import com.migration.manatal.exception.RateLimitException;
 import com.migration.manatal.model.client.ClientSource;
 import com.migration.manatal.model.client.ClientSource.SourceContact;
 import com.migration.manatal.model.client.ClientSource.SourceNote;
 import com.migration.manatal.model.client.ClientTarget;
-import com.migration.manatal.transform.client.ClientMapper;
+import com.migration.manatal.transform.ClientMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -44,6 +45,9 @@ public class ManatalSourceClientService {
     @Value("${migration.manatal.rate-limit-retry-seconds:60}")
     private int rateLimitRetrySeconds;
 
+    @Value("${migration.batch.retry-limit:3}")
+    private int retryLimit;
+
     //============================== Organizations =================================
 
     public String listOrganizations(int offset) {
@@ -57,7 +61,8 @@ public class ManatalSourceClientService {
             return sendGetRequest(url, "fetching organization by ID");
         } catch (ApiException e) {
             if (e.getStatus() == HttpStatus.NOT_FOUND) {
-                throw ApiException.notFound("Organization not found: " + organizationId);
+                throw new NonRetryableApiException(HttpStatus.NOT_FOUND,
+                        "Organization not found: " + organizationId);
             }
             throw e;
         }
@@ -79,13 +84,24 @@ public class ManatalSourceClientService {
         try {
             ClientSource source = objectMapper.readValue(organizationJson, ClientSource.class);
 
-            String contactsJson = listContactsByOrganization(Integer.parseInt(organizationId));
+            int organizationIdNumber;
+            try {
+                organizationIdNumber = Integer.parseInt(organizationId);
+            } catch (NumberFormatException e) {
+                throw ApiException.badRequest("Invalid organization id: " + organizationId);
+            }
+
+            String contactsJson = listContactsByOrganization(organizationIdNumber);
             List<SourceContact> contactSources = parseResultsList(contactsJson, SourceContact.class);
 
             String notesJson = listOrganizationNotes(organizationId, 0);
             List<SourceNote> noteSources = parseResultsList(notesJson, SourceNote.class);
 
             return clientMapper.toTarget(source, contactSources, noteSources);
+        } catch (RateLimitException e) {
+            throw e;
+        } catch (ApiException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Error processing organization {} for preview", organizationId, e);
             throw ApiException.badGateway("Error processing organization " + organizationId + " for preview", e);
@@ -128,62 +144,116 @@ public class ManatalSourceClientService {
     // ============================= HTTP =============================
 
     private void sendPatchRequest(String url, Object body, String context) {
-        try {
-            String json = objectMapper.writeValueAsString(body);
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .header("Authorization", "Token " + token)
-                    .header("Content-Type", "application/json")
-                    .method("PATCH", HttpRequest.BodyPublishers.ofString(json))
-                    .build();
+        int attempt = 0;
+        while (true) {
+            try {
+                String json = objectMapper.writeValueAsString(body);
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .header("Authorization", "Token " + token)
+                        .header("Content-Type", "application/json")
+                        .method("PATCH", HttpRequest.BodyPublishers.ofString(json))
+                        .build();
 
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-            if (response.statusCode() == HttpStatus.OK.value() || response.statusCode() == 204) {
-                return;
+                if (response.statusCode() == HttpStatus.OK.value() || response.statusCode() == 204) {
+                    return;
+                }
+
+                if (response.statusCode() == 429) {
+                    throw new RateLimitException(retryAfterSeconds(response));
+                }
+
+                throw apiExceptionFor(response, context);
+
+            } catch (RateLimitException e) {
+                if (++attempt >= retryLimit) throw e;
+                log.warn("Rate limited while {} (attempt {}/{}), retrying after {}s",
+                        context, attempt, retryLimit, e.getRetryAfterSeconds());
+                sleep(e.getRetryAfterSeconds());
+            } catch (ApiException e) {
+                throw e;
+            } catch (Exception e) {
+                log.error("Exception while {}", context, e);
+                throw ApiException.badGateway("Exception while " + context, e);
             }
-
-            if (response.statusCode() == 429) {
-                throw new RateLimitException(rateLimitRetrySeconds);
-            }
-
-            log.error("Error {}: HTTP {} - {}", context, response.statusCode(), response.body());
-            throw new ApiException(HttpStatus.valueOf(response.statusCode()), response.body());
-
-        } catch (ApiException | RateLimitException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("Exception while {}", context, e);
-            throw ApiException.badGateway("Exception while " + context, e);
         }
     }
 
     private String sendGetRequest(String url, String context) {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Authorization", "Token " + token)
-                .GET()
-                .build();
+        int attempt = 0;
+        while (true) {
+            try {
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .header("Authorization", "Token " + token)
+                        .GET()
+                        .build();
 
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+                if (response.statusCode() == HttpStatus.OK.value()) {
+                    return response.body();
+                }
+
+                if (response.statusCode() == 429) {
+                    throw new RateLimitException(retryAfterSeconds(response));
+                }
+
+                throw apiExceptionFor(response, context);
+
+            } catch (RateLimitException e) {
+                if (++attempt >= retryLimit) throw e;
+                log.warn("Rate limited while {} (attempt {}/{}), retrying after {}s",
+                        context, attempt, retryLimit, e.getRetryAfterSeconds());
+                sleep(e.getRetryAfterSeconds());
+            } catch (ApiException e) {
+                throw e;
+            } catch (Exception e) {
+                log.error("Exception while {}", context, e);
+                throw ApiException.badGateway("Exception while " + context, e);
+            }
+        }
+    }
+
+    private ApiException apiExceptionFor(HttpResponse<String> response, String context) {
+        int code = response.statusCode();
+        String body = response.body();
+        log.error("Error {}: HTTP {} - {}", context, code, body);
+
+        HttpStatus status = HttpStatus.resolve(code);
+        if (status == null) {
+            return new ApiException(HttpStatus.BAD_GATEWAY,
+                    "Unexpected HTTP " + code + " while " + context + ": " + body);
+        }
+        if (status.is4xxClientError()) {
+            return new NonRetryableApiException(status, body);
+        }
+        return new ApiException(status, body);
+    }
+
+    private long retryAfterSeconds(HttpResponse<?> response) {
+        var headers = response.headers();
+        if (headers != null) {
+            var retryAfter = headers.firstValue("Retry-After").orElse(null);
+            if (retryAfter != null) {
+                try {
+                    return Long.parseLong(retryAfter);
+                } catch (NumberFormatException e) {
+                    log.warn("Could not parse Retry-After header value '{}', using default", retryAfter);
+                }
+            }
+        }
+        return rateLimitRetrySeconds;
+    }
+
+    private void sleep(long seconds) {
         try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-            if (response.statusCode() == HttpStatus.OK.value()) {
-                return response.body();
-            }
-
-            if (response.statusCode() == 429) {
-                throw new RateLimitException(rateLimitRetrySeconds);
-            }
-
-            log.error("Error {}: HTTP {} - {}", context, response.statusCode(), response.body());
-            throw new ApiException(HttpStatus.valueOf(response.statusCode()), response.body());
-
-        } catch (ApiException | RateLimitException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("Exception while {}", context, e);
-            throw ApiException.badGateway("Exception while " + context, e);
+            Thread.sleep(seconds * 1000L);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw ApiException.badGateway("Interrupted while waiting for rate limit", e);
         }
     }
 

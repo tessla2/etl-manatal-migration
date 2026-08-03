@@ -1,4 +1,4 @@
-package com.migration.manatal.transform.client;
+package com.migration.manatal.transform;
 
 import com.migration.manatal.model.client.ClientSource;
 import com.migration.manatal.model.client.ClientSource.SourceNote;
@@ -24,6 +24,7 @@ public class ClientMapper {
         ClientTarget target = new ClientTarget();
         target.setClientName(source.getClientName());
         target.setClientWebsite(source.getClientWebsite());
+        target.setClientLogo(source.getClientLogo());
         target.setClientIndustry(source.getClientIndustry());
         target.setClientLocation(source.getClientAddress());
         target.setClientDescription(source.getClientDescription());

@@ -1,9 +1,9 @@
-package com.migration.manatal.service.client;
+package com.migration.manatal.service.job;
 
 import com.migration.manatal.exception.ApiException;
 import com.migration.manatal.exception.NonRetryableApiException;
 import com.migration.manatal.exception.RateLimitException;
-import com.migration.manatal.model.client.ClientTarget;
+import com.migration.manatal.model.job.JobTarget;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,7 +20,7 @@ import java.net.http.HttpResponse;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ManatalTargetClientService {
+public class ManatalTargetJobService {
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -37,21 +37,11 @@ public class ManatalTargetClientService {
     @Value("${migration.batch.retry-limit:3}")
     private int retryLimit;
 
-    public String migrateOrganization(ClientTarget target) {
-        String url = normalizedBaseUrl() + "/organizations/";
-        return sendPostRequest(url, target, "migrating organization");
-    }
-
-    public String createOrganizationNote(int organizationId, String content) {
-        String url = normalizedBaseUrl() + "/organizations/" + organizationId + "/notes/";
+    public String createJobNote(int jobId, String content) {
+        String url = normalizedBaseUrl() + "/jobs/" + jobId + "/notes/";
         ObjectNode body = objectMapper.createObjectNode();
         body.put("info", content);
-        return sendPostRequest(url, body, "creating note for organization " + organizationId);
-    }
-
-    public String createContact(ClientTarget.ContactTarget contact) {
-        String url = normalizedBaseUrl() + "/contacts/";
-        return sendPostRequest(url, contact, "creating contact");
+        return sendPostRequest(url, body, "creating note for job " + jobId);
     }
 
     //============================== HTTP  =================================
@@ -136,5 +126,10 @@ public class ManatalTargetClientService {
 
     private String normalizedBaseUrl() {
         return baseUrl.replaceAll("/+$", "");
+    }
+
+    public String migrateJob(JobTarget transformed) {
+        String url = normalizedBaseUrl() + "/jobs/";
+        return sendPostRequest(url, transformed, "migrating job");
     }
 }

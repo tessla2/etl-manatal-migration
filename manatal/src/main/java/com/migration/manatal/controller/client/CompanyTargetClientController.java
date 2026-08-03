@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/company-target")
 @RequiredArgsConstructor
-public class CompanyTargetController {
+public class CompanyTargetClientController {
 
     private final ManatalSourceClientService sourceService;
     private final ManatalTargetClientService targetService;

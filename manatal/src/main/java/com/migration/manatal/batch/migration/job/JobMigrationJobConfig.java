@@ -1,9 +1,9 @@
-package com.migration.manatal.batch.migration.client;
+package com.migration.manatal.batch.migration.job;
 
-import com.migration.manatal.entity.client.ClientMigration;
+import com.migration.manatal.entity.job.JobMigration;
 import com.migration.manatal.exception.ApiException;
 import com.migration.manatal.exception.RateLimitException;
-import com.migration.manatal.repository.client.ClientMigrationRepository;
+import com.migration.manatal.repository.job.JobMigrationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.builder.JobBuilder;
@@ -24,14 +24,15 @@ import java.util.Map;
 
 @Configuration
 @RequiredArgsConstructor
-public class ClientMigrationJobConfig {
+public class JobMigrationJobConfig {
 
     private final JobRepository jobRepository;
     private final PlatformTransactionManager transactionManager; // Spring interface to manage transactions, ex. if 50 itens are processed and 1 fails, the transaction manager will rollback all 50 items to avoid data inconsistency
-    private final ClientMigrationRepository clientMigrationRepository;
-    private final LoadClientsTasklet loadClientsTasklet;
-    private final ClientMigrationProcessor processor;
-    private final ClientMigrationWriter writer;
+    private final JobMigrationRepository jobMigrationRepository;
+    private final LoadJobsTasklet loadJobsTasklet;
+    private final JobMigrationProcessor processor;
+    private final JobMigrationWriter writer;
+
 
     @Value("${migration.batch.chunk-size}")
     private int chunkSize;
@@ -42,27 +43,29 @@ public class ClientMigrationJobConfig {
     @Value("${migration.batch.skip-limit}")
     private int skipLimit;
 
+
     @Bean
-    public Job clientMigrationJob() {
-        return new JobBuilder("clientMigrationJob", jobRepository)
+    public Job jobMigrationJob() {
+        return new JobBuilder("jobMigrationJob", jobRepository)
                 .incrementer(new RunIdIncrementer())
-                .start(loadClientsStep())
-                .next(migrateClientsStep())
+                .start(loadJobsStep())
+                .next(migrateJobsStep())
+                .build();
+
+    }
+
+    @Bean
+    public Step loadJobsStep() {
+        return new StepBuilder("loadJobsStep", jobRepository)
+                .tasklet(loadJobsTasklet, transactionManager)
                 .build();
     }
 
     @Bean
-    public Step loadClientsStep() {
-        return new StepBuilder("loadClientsStep", jobRepository)
-                .tasklet(loadClientsTasklet, transactionManager)
-                .build();
-    }
-
-    @Bean
-    public Step migrateClientsStep() {
-        return new StepBuilder("migrateClientsStep", jobRepository)
-                .<ClientMigration, ClientMigrationPackage>chunk(chunkSize)
-                .reader(clientReader())
+    public Step migrateJobsStep() {
+        return new StepBuilder("migrateJobsStep", jobRepository)
+                .<JobMigration, JobMigrationPackage>chunk(chunkSize)
+                .reader(jobReader())
                 .processor(processor)
                 .writer(writer)
                 .transactionManager(transactionManager)
@@ -75,12 +78,14 @@ public class ClientMigrationJobConfig {
     }
 
     @Bean
-    public ItemReader<ClientMigration> clientReader() {
-        RepositoryItemReader<ClientMigration> reader = new RepositoryItemReader<>(
-                clientMigrationRepository, Map.of("id", Sort.Direction.ASC));
+    public ItemReader<JobMigration> jobReader() {
+        RepositoryItemReader<JobMigration> reader = new RepositoryItemReader<>(
+                jobMigrationRepository, Map.of("id", Sort.Direction.ASC));
         reader.setMethodName("findByStatus");
         reader.setArguments(List.of("PENDENTE"));
         reader.setPageSize(chunkSize);
         return reader;
+
     }
+
 }

@@ -22,10 +22,15 @@ spring:
     job:
       enabled: false
 
+
 logging:
   level:
     com.migration: DEBUG
 
 migration:
+  batch:
+    chunk-size: 1
+    retry-limit: 3
+    skip-limit: 100
   manatal:
-    rate-limit-ms: 10
+    rate-limit-retry-seconds: 1

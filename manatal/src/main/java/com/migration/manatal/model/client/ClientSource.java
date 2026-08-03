@@ -15,6 +15,8 @@ public class ClientSource {
     private String clientName;
     @JsonProperty("website")
     private String clientWebsite;
+    @JsonProperty("logo")
+    private String clientLogo;
     @JsonProperty("clientbusinessarea")
     private Map<String, Object> clientIndustry;
     @JsonProperty("address")

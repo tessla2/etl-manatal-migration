@@ -2,7 +2,6 @@ package com.migration.manatal.transform;
 
 import com.migration.manatal.model.client.ClientSource;
 import com.migration.manatal.model.client.ClientTarget;
-import com.migration.manatal.transform.client.ClientMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -19,7 +18,7 @@ class ClientMapperTest {
         source.setClientName("Acme Corp");
         source.setClientWebsite("acme.com");
         source.setClientIndustry(Map.of("id", 1, "name", "Tech"));
-        source.setClientAddress("Rua A, 123");
+        source.setClientAddress("Porto, Portugal");
         source.setClientDescription("Empresa de tecnologia");
 
         ClientTarget target = mapper.toTarget(source);
@@ -27,7 +26,7 @@ class ClientMapperTest {
         assertNotNull(target);
         assertEquals("Acme Corp", target.getClientName());
         assertEquals("acme.com", target.getClientWebsite());
-        assertEquals("Rua A, 123", target.getClientLocation());
+        assertEquals("Porto, Portugal", target.getClientLocation());
         assertEquals("Empresa de tecnologia", target.getClientDescription());
         assertEquals(1193857, target.getClientOwner());
     }
