@@ -22,6 +22,7 @@ public class JobTarget {
     private String city;
     private String state;
     private String country;
+    private String currency;
     private String address;
     private String zipcode;
     @JsonProperty("is_remote")
@@ -50,20 +51,26 @@ public class JobTarget {
     public static class JobCustomFields {
         @JsonProperty("businessunit")
         private String businessUnit;
-        @JsonProperty("experiencelevelofficial")
-        private List<String> experienceLevelOfficial;
+        @JsonProperty("experiencelevel")
+        private List<String> experienceLevel;
         @JsonProperty("englishlevel")
         private String englishLevel;
         private String workplace;
         private String rate;
         private List<String> category;
-        @JsonProperty("technicalskill")
-        private List<String> technicalSkill;
+        @JsonProperty("mandatoryskills")
+        private List<String> mandatorySkills;
         private List<String> portugus;
         @JsonProperty("officelocation")
         private List<String> officeLocation;
         @JsonProperty("jobadditionalinformation")
         private String jobAdditionalInformation;
+        @JsonProperty("projectnotes")
+        private String projectNotes;
+        @JsonProperty("skillsnotes")
+        private String skillNotes;
+        @JsonProperty("lostreason")
+        private String lostReason;
         @JsonProperty("consultantname")
         private String consultantName;
         @JsonProperty("startdatejob")

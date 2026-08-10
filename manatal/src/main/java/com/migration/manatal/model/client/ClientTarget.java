@@ -1,5 +1,6 @@
 package com.migration.manatal.model.client;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
@@ -49,6 +50,10 @@ public class ClientTarget {
         private String description;
         @JsonProperty("organization")
         private Long organization;
+        @JsonProperty("custom_fields")
+        private Map<String, Object> customFields;
+        @JsonIgnore
+        private Long sourceContactId;
     }
 
     @Data
@@ -60,6 +65,10 @@ public class ClientTarget {
         private String creator;
         @JsonProperty("created_at")
         private String createdAt;
+        @JsonIgnore
+        private Long contactId;
+        @JsonIgnore
+        private String creatorName;
     }
 
     private List<ContactTarget> contacts;

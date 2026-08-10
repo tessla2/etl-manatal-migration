@@ -37,6 +37,10 @@ public class ClientMapper {
             ct.setEmail(c.getEmail());
             ct.setPhoneNumber(c.getPhoneNumber());
             ct.setDescription(c.getDescription());
+            ct.setCustomFields(c.getCustomFields());
+            if (c.getId() != null) {
+                ct.setSourceContactId(c.getId().longValue());
+            }
             return ct;
         }).toList());
 
@@ -45,6 +49,10 @@ public class ClientMapper {
             nt.setContent(n.getContent());
             nt.setCreator(FIXED_CREATOR_ID);
             nt.setCreatedAt(n.getCreatedAt());
+            nt.setCreatorName(n.getCreatorName());
+            if (n.getContactId() != null) {
+                nt.setContactId(n.getContactId().longValue());
+            }
             return nt;
         }).toList());
 

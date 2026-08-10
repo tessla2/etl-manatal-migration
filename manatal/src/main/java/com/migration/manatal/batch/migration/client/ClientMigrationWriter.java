@@ -14,7 +14,9 @@ import org.springframework.batch.infrastructure.item.ItemWriter;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Component
@@ -30,6 +32,14 @@ public class ClientMigrationWriter implements ItemWriter<ClientMigrationPackage>
     public void write(Chunk<? extends ClientMigrationPackage> chunk) throws Exception {
         for (ClientMigrationPackage pkg : chunk) {
             ClientMigration entity = pkg.getEntity();
+            log.info("Writing client {} ({}) — status={}",
+                    entity.getSourceOrganizationId(), entity.getSourceName(), entity.getStatus());
+
+            if (entity.getTargetOrganizationId() != null) {
+                log.warn("Client {} already exists in DB with target organization id {} — skipping",
+                        entity.getSourceOrganizationId(), entity.getTargetOrganizationId());
+                continue;
+            }
 
             try {
                 if (pkg.getErrorMessage() != null) {
@@ -51,6 +61,7 @@ public class ClientMigrationWriter implements ItemWriter<ClientMigrationPackage>
                     markErro(entity, "Organization created but failed to parse target id: " + e.getMessage());
                     continue;
                 }
+                log.info("Client {}: target organization created with id {}", entity.getSourceOrganizationId(), targetOrganizationId);
 
                 entity.setTargetOrganizationId(targetOrganizationId);
                 entity.setStatus("SUCESSO");
@@ -66,10 +77,9 @@ public class ClientMigrationWriter implements ItemWriter<ClientMigrationPackage>
                     log.warn("Client {} migrated but failed to mark exported: {}", entity.getSourceOrganizationId(), e.getMessage());
                 }
 
-                postContacts(targetOrganizationId, contacts, entity);
-                postNotes(targetOrganizationId, notes, entity);
-            } catch (RateLimitException e) {
-                throw e;
+                Map<Long, Long> sourceToTargetContact = postContacts(targetOrganizationId, contacts, entity);
+                postNotes(targetOrganizationId, notes, entity, sourceToTargetContact);
+            } catch (RateLimitException e) {                throw e;
             } catch (ApiException e) {
                 if (e.isRetryable()) {
                     throw e;
@@ -81,9 +91,10 @@ public class ClientMigrationWriter implements ItemWriter<ClientMigrationPackage>
         }
     }
 
-    private void postContacts(long targetOrganizationId, List<ClientTarget.ContactTarget> contacts, ClientMigration entity) {
+    private Map<Long, Long> postContacts(long targetOrganizationId, List<ClientTarget.ContactTarget> contacts, ClientMigration entity) {
+        Map<Long, Long> sourceToTargetContact = new HashMap<>();
         if (contacts.isEmpty()) {
-            return;
+            return sourceToTargetContact;
         }
         int posted = 0;
         for (ClientTarget.ContactTarget contact : contacts) {
@@ -92,18 +103,31 @@ public class ClientMigrationWriter implements ItemWriter<ClientMigrationPackage>
             }
             contact.setOrganization(targetOrganizationId);
             try {
-                targetService.createContact(contact);
+                String response = targetService.createContact(contact);
+                long targetContactId = 0;
+                if (contact.getSourceContactId() != null) {
+                    targetContactId = objectMapper.readTree(response).path("id").asLong();
+                    if (targetContactId > 0) {
+                        sourceToTargetContact.put(contact.getSourceContactId(), targetContactId);
+                    }
+                }
                 posted++;
+                log.info("Client {}: contact '{}' created in target (source id {}, target id {})",
+                        entity.getSourceOrganizationId(), contact.getFullName(),
+                        contact.getSourceContactId(), targetContactId);
             } catch (Exception e) {
-                log.warn("Client {}: failed to create contact '{}': {}",
-                        entity.getSourceOrganizationId(), contact.getFullName(), e.getMessage());
+                log.warn("Client {}: failed to create contact '{}' (source id {}): {}",
+                        entity.getSourceOrganizationId(), contact.getFullName(),
+                        contact.getSourceContactId(), e.getMessage());
             }
         }
         log.info("Client {}: created {}/{} contacts for target organization {}",
                 entity.getSourceOrganizationId(), posted, contacts.size(), targetOrganizationId);
+        return sourceToTargetContact;
     }
 
-    private void postNotes(long targetOrganizationId, List<ClientTarget.TargetNote> notes, ClientMigration entity) {
+    private void postNotes(long targetOrganizationId, List<ClientTarget.TargetNote> notes, ClientMigration entity,
+                           Map<Long, Long> sourceToTargetContact) {
         if (notes.isEmpty()) {
             return;
         }
@@ -113,7 +137,22 @@ public class ClientMigrationWriter implements ItemWriter<ClientMigrationPackage>
                 continue;
             }
             try {
-                targetService.createOrganizationNote((int) targetOrganizationId, note.getContent());
+                String content = note.getContent();
+                if (note.getCreatorName() != null && !note.getCreatorName().isBlank()) {
+                    content = note.getCreatorName() + ": " + content;
+                }
+                Long targetContactId = note.getContactId() == null ? null : sourceToTargetContact.get(note.getContactId());
+                if (targetContactId != null) {
+                    targetService.createContactNote(targetContactId, content);
+                    log.info("Client {}: note routed to contact {} (author '{}'): '{}...'",
+                            entity.getSourceOrganizationId(), targetContactId,
+                            note.getCreatorName(), preview(note.getContent()));
+                } else {
+                    targetService.createOrganizationNote((int) targetOrganizationId, content);
+                    log.info("Client {}: note routed to organization {} (author '{}'): '{}...'",
+                            entity.getSourceOrganizationId(), targetOrganizationId,
+                            note.getCreatorName(), preview(note.getContent()));
+                }
                 posted++;
             } catch (Exception e) {
                 log.warn("Client {}: failed to create note '{}...': {}",

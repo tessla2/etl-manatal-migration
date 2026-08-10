@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ============================================================
+     Manatal ETL - Serviço Windows (WinSW)
+     ------------------------------------------------------------
+     COMO USAR:
+       1) Baixar o WinSW (https://github.com/winsw/winsw/releases,
+          ex.: WinSW-x64.exe) e renomear para manatal-service.exe,
+          colocando NA MESMA pasta deste arquivo (o nome do .xml
+          precisa bater com o nome do .exe).
+       2) Colocar o manatal-0.0.1-SNAPSHOT.jar na mesma pasta.
+       3) Instalar como Administrador:
+            manatal-service.exe install
+            manatal-service.exe start
+       4) Status / parar / desinstalar:
+            manatal-service.exe status
+            manatal-service.exe stop
+            manatal-service.exe uninstall
+     O banco e as tabelas são criados automaticamente no 1o boot
+     (ddl-auto: update + spring.batch.initialize-schema: always).
+     ============================================================ -->
+<service>
+
+  <id>ManatalMigrationService</id>
+  <name>Manatal Migration ETL</name>
+  <description>ETL de migração Manatal (source -> target). Spring Boot + Spring Batch.</description>
+
+  <!-- Java 21: use o caminho REAL do java.exe da máquina (JRE/JDK 21).
+       Se o Java estiver no PATH do sistema, basta: <executable>java</executable> -->
+  <executable>C:\Program Files\Java\jdk-21\bin\java.exe</executable>
+  <arguments>-Xms256m -Xmx1024m -jar &quot;%BASE%\manatal-0.0.1-SNAPSHOT.jar&quot; --spring.profiles.active=prod</arguments>
+
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+
+  <!-- ============================================================
+       VARIÁVEIS DE AMBIENTE DA APP
+       TROQUE TODOS OS VALORES ANTES DE INSTALAR.
+       (Se preferir, defina-as como variáveis de sistema e apague
+        os blocos <env> abaixo — o serviço herda as do sistema.)
+       ============================================================ -->
+  <env name="DB_URL" value="jdbc:postgresql://localhost:5432/manatal_migration" />
+  <env name="DB_USERNAME" value="manatal_etl" />
+  <env name="DB_PASSWORD" value="TROQUE_SENHA_FORTE" />
+
+  <env name="JWT_SECRET" value="TROQUE_MINIMO_32_CARACTERES_SEGREDO_JWT" />
+  <env name="ADMIN_USERNAME" value="admin" />
+  <env name="ADMIN_PASSWORD" value="TROQUE_SENHA_DASHBOARD" />
+
+  <env name="MANATAL_TOKEN" value="TROQUE_TOKEN_SOURCE" />
+  <env name="MANATAL_TARGET_TOKEN" value="TROQUE_TOKEN_TARGET" />
+
+  <!-- Log do serviço (WinSW): rola a cada 10 MB, mantém 8 arquivos.
+       O log da app (Spring) fica em logs\manatal-migration.log na pasta do exe. -->
+  <log mode="roll-by-size" sizeThreshold="10240" keepFiles="8" />
+
+  <!-- Se o processo cair, reinicia após 10 s -->
+  <onfailure action="restart" delay="10 sec" />
+
+</service>

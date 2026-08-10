@@ -2,6 +2,7 @@ package com.migration.manatal.sandbox;
 
 import com.migration.manatal.model.client.ClientSource;
 import com.migration.manatal.model.client.ClientTarget;
+import com.migration.manatal.service.ManatalApiClient;
 import com.migration.manatal.service.client.ManatalTargetClientService;
 import com.migration.manatal.transform.ClientMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,24 +45,26 @@ class ManatalPostSandboxClientTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        targetService = new ManatalTargetClientService(
+        ManatalApiClient apiClient = new ManatalApiClient(
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build(), objectMapper);
 
-        var baseUrlField = ManatalTargetClientService.class.getDeclaredField("baseUrl");
+        var baseUrlField = ManatalApiClient.class.getDeclaredField("baseUrl");
         baseUrlField.setAccessible(true);
-        baseUrlField.set(targetService, BASE_URL);
+        baseUrlField.set(apiClient, BASE_URL);
+
+        var retrySecondsField = ManatalApiClient.class.getDeclaredField("rateLimitRetrySeconds");
+        retrySecondsField.setAccessible(true);
+        retrySecondsField.set(apiClient, 1);
+
+        var retryLimitField = ManatalApiClient.class.getDeclaredField("retryLimit");
+        retryLimitField.setAccessible(true);
+        retryLimitField.set(apiClient, 3);
+
+        targetService = new ManatalTargetClientService(apiClient);
 
         var tokenField = ManatalTargetClientService.class.getDeclaredField("targetToken");
         tokenField.setAccessible(true);
         tokenField.set(targetService, System.getenv("MANATAL_TARGET_TOKEN"));
-
-        var retrySecondsField = ManatalTargetClientService.class.getDeclaredField("rateLimitRetrySeconds");
-        retrySecondsField.setAccessible(true);
-        retrySecondsField.set(targetService, 1);
-
-        var retryLimitField = ManatalTargetClientService.class.getDeclaredField("retryLimit");
-        retryLimitField.setAccessible(true);
-        retryLimitField.set(targetService, 3);
     }
 
     @Test
@@ -68,6 +72,7 @@ class ManatalPostSandboxClientTest {
         ClientSource source = objectMapper.readValue(SAMPLE_SOURCE_CLIENT, ClientSource.class);
 
         var contact1 = new ClientSource.SourceContact();
+        contact1.setId(1001);
         contact1.setFullName("Maria Silva");
         contact1.setDisplayName("Maria");
         contact1.setEmail("maria@acme.example.com");
@@ -75,18 +80,26 @@ class ManatalPostSandboxClientTest {
         contact1.setDescription("Contacto principal");
 
         var contact2 = new ClientSource.SourceContact();
+        contact2.setId(1002);
         contact2.setFullName("Joao Pereira");
         contact2.setDisplayName("Joao");
         contact2.setEmail("joao@acme.example.com");
         contact2.setPhoneNumber("+351 920 000 000");
         contact2.setDescription("Contacto financeiro");
 
-        var note = new ClientSource.SourceNote();
-        note.setContent("Nota de teste: cliente contactado no dia 30/07 para validar o POST de notas.");
-        note.setCreator(1);
-        note.setCreatedAt("2026-07-30T14:00:00Z");
+        var contactNote = new ClientSource.SourceNote();
+        contactNote.setContent("Cliente contactado no dia 30/07 para validar o POST de notas de contact.");
+        contactNote.setCreator(1);
+        contactNote.setCreatorName("Maria Silva");
+        contactNote.setCreatedAt("2026-07-30T14:00:00Z");
+        contactNote.setContactId(1001);
 
-        ClientTarget target = clientMapper.toTarget(source, List.of(contact1, contact2), List.of(note));
+        var orgNote = new ClientSource.SourceNote();
+        orgNote.setContent("Nota de teste na ORGANIZATION (fallback quando a nota nao pertence a um contact).");
+        orgNote.setCreator(1);
+        orgNote.setCreatedAt("2026-07-30T15:00:00Z");
+
+        ClientTarget target = clientMapper.toTarget(source, List.of(contact1, contact2), List.of(contactNote, orgNote));
         target.setClientName("[MIGRATION-TEST] " + target.getClientName());
         target.setClientIndustry(null);
         target.setCustomFields(Map.of("clientbusinessarea", List.of("IT", "R&S")));
@@ -106,6 +119,7 @@ class ManatalPostSandboxClientTest {
         long targetOrgId = objectMapper.readTree(response).path("id").asLong();
         assertTrue(targetOrgId > 0, "Expected a target organization id in response: " + response);
 
+        Map<Long, Long> sourceToTargetContact = new HashMap<>();
         for (ClientTarget.ContactTarget contact : contacts) {
             contact.setOrganization(targetOrgId);
             log.info("=== POST /contacts/ -> {} ===", contact.getFullName());
@@ -113,14 +127,29 @@ class ManatalPostSandboxClientTest {
             log.info(contactResponse);
             long contactId = objectMapper.readTree(contactResponse).path("id").asLong();
             assertTrue(contactId > 0, "Expected a target contact id in response: " + contactResponse);
+            if (contact.getSourceContactId() != null) {
+                sourceToTargetContact.put(contact.getSourceContactId(), contactId);
+            }
         }
 
         for (ClientTarget.TargetNote noteContent : notes) {
-            log.info("=== POST /organizations/{}/notes/ ===", targetOrgId);
-            String noteResponse = targetService.createOrganizationNote((int) targetOrgId, noteContent.getContent());
-            log.info(noteResponse);
-            long noteId = objectMapper.readTree(noteResponse).path("id").asLong();
-            assertTrue(noteId > 0, "Expected a target note id in response: " + noteResponse);
+            String content = noteContent.getCreatorName() == null || noteContent.getCreatorName().isBlank()
+                    ? noteContent.getContent()
+                    : noteContent.getCreatorName() + ": " + noteContent.getContent();
+            Long targetContactId = noteContent.getContactId() == null ? null : sourceToTargetContact.get(noteContent.getContactId());
+            if (targetContactId != null) {
+                log.info("=== POST /contacts/{}/notes/ ===", targetContactId);
+                String noteResponse = targetService.createContactNote(targetContactId, content);
+                log.info(noteResponse);
+                long noteId = objectMapper.readTree(noteResponse).path("id").asLong();
+                assertTrue(noteId > 0, "Expected a target contact note id in response: " + noteResponse);
+            } else {
+                log.info("=== POST /organizations/{}/notes/ ===", targetOrgId);
+                String noteResponse = targetService.createOrganizationNote((int) targetOrgId, content);
+                log.info(noteResponse);
+                long noteId = objectMapper.readTree(noteResponse).path("id").asLong();
+                assertTrue(noteId > 0, "Expected a target note id in response: " + noteResponse);
+            }
         }
     }
 }

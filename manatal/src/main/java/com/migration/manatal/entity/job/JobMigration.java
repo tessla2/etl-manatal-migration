@@ -19,6 +19,8 @@ public class JobMigration {
     private String positionName;
     @Column(name = "source_organization_id")
     private String sourceOrganizationId;
+    @Column(name = "target_organization_id")
+    private Long targetOrganizationId;
     @Column(name = "status")
     private String status;
     @Column(name = "error_message", columnDefinition = "TEXT")

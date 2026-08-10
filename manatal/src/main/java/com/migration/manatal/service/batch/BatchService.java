@@ -2,11 +2,11 @@ package com.migration.manatal.service.batch;
 
 import com.migration.manatal.exception.ApiException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.batch.core.launch.JobOperator;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.batch.core.launch.*;
 import org.springframework.batch.core.launch.NoSuchJobException;
-import org.springframework.batch.core.launch.NoSuchJobExecutionException;
 import org.springframework.batch.core.job.parameters.InvalidJobParametersException;
-import org.springframework.batch.core.launch.JobInstanceAlreadyExistsException;
+import org.springframework.batch.core.launch.NoSuchJobException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.Properties;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class BatchService {
 
@@ -31,7 +32,9 @@ public class BatchService {
         params.setProperty("timestamp", LocalDateTime.now().toString());
 
         try {
-            return jobOperator.start(jobName, params);
+            Long executionId = jobOperator.start(jobName, params);
+            log.info("Started batch job '{}' with execution id {}", jobName, executionId);
+            return executionId;
         } catch (NoSuchJobException e) {
             throw ApiException.notFound("Job not found: " + jobName);
         } catch (JobInstanceAlreadyExistsException | InvalidJobParametersException e) {

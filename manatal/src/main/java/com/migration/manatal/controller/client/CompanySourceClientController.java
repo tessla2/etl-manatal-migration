@@ -1,5 +1,6 @@
 package com.migration.manatal.controller.client;
 
+import com.migration.manatal.model.client.ClientSource;
 import com.migration.manatal.model.client.ClientTarget;
 import com.migration.manatal.service.client.ManatalSourceClientService;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,12 @@ public class CompanySourceClientController {
             @RequestParam(defaultValue = "0") int offset) {
         return ResponseEntity.ok(service.listContacts(offset));
     }
+
+    @GetMapping("/organizations/{id}")
+    public ResponseEntity<String> getOrganizationById(@PathVariable String id){
+        return ResponseEntity.ok(service.fetchOrganizationById(id));
+    }
+
 
     @GetMapping("/organizations/{id}/preview")
     public ResponseEntity<ClientTarget> previewOrganization(@PathVariable String id) {

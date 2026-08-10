@@ -31,12 +31,20 @@ public class JobMigrationWriter implements ItemWriter<JobMigrationPackage> {
         for (JobMigrationPackage pkg : chunk) {
             JobMigration entity = pkg.getEntity();
 
+            if (entity.getTargetJobId() != null) {
+                log.warn("Job {} already exists in DB with target job id {} — skipping",
+                        entity.getSourceJobId(), entity.getTargetJobId());
+                continue;
+            }
+
             try {
                 if (pkg.getErrorMessage() != null) {
+                    log.info("Job {}: skipping write - error from processing", entity.getSourceJobId());
                     markErro(entity, pkg.getErrorMessage());
                     continue;
                 }
 
+                log.info("Job {} ({}): writing to target...", entity.getSourceJobId(), entity.getPositionName());
                 JobTarget transformed = pkg.getTransformed();
                 List<JobTarget.TargetNote> notes = transformed.getNotes() == null ? List.of() : transformed.getNotes();
                 transformed.setNotes(null);
@@ -54,6 +62,7 @@ public class JobMigrationWriter implements ItemWriter<JobMigrationPackage> {
                 entity.setStatus("SUCESSO");
                 entity.setErrorMessage(null);
                 repository.save(entity);
+                log.info("Job {}: created target job {} (SUCESSO)", entity.getSourceJobId(), targetJobId);
 
                 try {
                     sourceService.updateCustomField(entity.getSourceJobId(), "exported", "Yes");
@@ -66,9 +75,12 @@ public class JobMigrationWriter implements ItemWriter<JobMigrationPackage> {
 
                 postNotes(targetJobId, notes, entity);
             } catch (RateLimitException e) {
+                log.warn("Job {}: rate limited (429) during write, leaving PENDENTE for retry", entity.getSourceJobId());
                 throw e;
             } catch (ApiException e) {
                 if (e.isRetryable()) {
+                    log.warn("Job {}: retryable API error ({}) during write, leaving PENDENTE for retry: {}",
+                            entity.getSourceJobId(), e.getStatus(), e.getMessage());
                     throw e;
                 }
                 markErro(entity, e.getMessage());

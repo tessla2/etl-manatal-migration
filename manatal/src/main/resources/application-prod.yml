@@ -1,4 +1,7 @@
 spring:
+  output:
+    ansi:
+      enabled: ALWAYS
   datasource:
     url: ${DB_URL}
     driver-class-name: org.postgresql.Driver
@@ -11,9 +14,35 @@ spring:
   batch:
     job:
       enabled: false
+    initialize-schema: always
+
+logging:
+  file:
+    name: ./logs/manatal-migration.log
 
 migration:
   batch:
     chunk-size: 50
     retry-limit: 3
     skip-limit: 10
+
+  security:
+    jwt-secret: ${JWT_SECRET}
+    jwt-expiration-hours: ${JWT_EXPIRATION_HOURS:24}
+    admin-username: ${ADMIN_USERNAME}
+    admin-password: ${ADMIN_PASSWORD}
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+
+  endpoint:
+    health:
+      show-details: always
+
+  metrics:
+    enable:
+      all: true

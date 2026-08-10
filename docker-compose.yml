@@ -1,0 +1,27 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: manatal-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: manatal_migration
+      POSTGRES_USER: manatal
+      POSTGRES_PASSWORD: manatal
+    ports:
+      - "5432:5432"
+    volumes:
+      - manatal-pgdata:/var/lib/postgresql/data
+    networks:
+      - shared-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U manatal -d manatal_migration"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  shared-net:
+    external: true
+
+volumes:
+  manatal-pgdata:

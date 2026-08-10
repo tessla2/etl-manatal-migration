@@ -1,6 +1,7 @@
 package com.migration.manatal.service.job;
 
 import com.migration.manatal.exception.ApiException;
+import com.migration.manatal.service.ManatalApiClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,14 +28,18 @@ class ManatalTargetJobServiceTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    private ManatalApiClient apiClient;
+
     private ManatalTargetJobService service;
 
     @BeforeEach
     void setUp() throws Exception {
-        service = new ManatalTargetJobService(httpClient, objectMapper);
-        var baseUrlField = ManatalTargetJobService.class.getDeclaredField("baseUrl");
+        apiClient = new ManatalApiClient(httpClient, objectMapper);
+        var baseUrlField = ManatalApiClient.class.getDeclaredField("baseUrl");
         baseUrlField.setAccessible(true);
-        baseUrlField.set(service, "https://api.manatal.com/open/v3/");
+        baseUrlField.set(apiClient, "https://api.manatal.com/open/v3/");
+
+        service = new ManatalTargetJobService(apiClient);
 
         var tokenField = ManatalTargetJobService.class.getDeclaredField("targetToken");
         tokenField.setAccessible(true);
@@ -73,5 +78,29 @@ class ManatalTargetJobServiceTest {
         var ex = assertThrows(ApiException.class, () -> service.createJobNote(42, "nota"));
 
         assertEquals(502, ex.getStatus().value());
+    }
+
+    @Test
+    void shouldListIndustries() throws Exception {
+        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(httpResponse);
+        when(httpResponse.statusCode()).thenReturn(200);
+        when(httpResponse.body()).thenReturn("""
+                {
+                  "count": 2,
+                  "next": null,
+                  "previous": null,
+                  "results": [
+                    {"id": 1, "name": "Accounting / Audit / Tax Services"},
+                    {"id": 2, "name": "Information Technology"}
+                  ]
+                }
+                """);
+
+        var result = service.listIndustries();
+
+        assertEquals(2, result.size());
+        assertEquals(1, result.get(0).id());
+        assertEquals("Information Technology", result.get(1).name());
     }
 }

@@ -2,40 +2,31 @@ package com.migration.manatal.service.job;
 
 
 import com.migration.manatal.exception.ApiException;
-import com.migration.manatal.exception.NonRetryableApiException;
 import com.migration.manatal.exception.RateLimitException;
 import com.migration.manatal.model.job.JobSource;
 import com.migration.manatal.model.job.JobTarget;
+import com.migration.manatal.service.ManatalApiClient;
 import com.migration.manatal.transform.JobMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static java.lang.Thread.sleep;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ManatalSourceJobService {
 
-    private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final JobMapper jobMapper;
-
-    @Value("${migration.manatal.base-url}")
-    private String baseUrl;
+    private final ManatalApiClient apiClient;
 
     @Value("${migration.manatal.source.token}")
     private String token;
@@ -43,37 +34,78 @@ public class ManatalSourceJobService {
     @Value("${migration.manatal.page-size:100}")
     private int pageSize;
 
-    @Value("${migration.manatal.rate-limit-retry-seconds:60}")
-    private int rateLimitRetrySeconds;
-
-    @Value("${migration.batch.retry-limit:3}")
-    private int retryLimit;
-
     //============================== Jobs =================================
 
     public String listJobs(int offset) {
-        String url = normalizedBaseUrl() + "/jobs/?limit=" + pageSize + "&offset=" + offset;
-        return sendGetRequest(url, "fetching Jobs");
+        String url = apiClient.endpoint("/jobs/?limit=" + pageSize + "&offset=" + offset);
+        return apiClient.get(url, token, "fetching Jobs");
     }
 
-    public String listJobWithExportedFilter(int offset) {
-        String url = normalizedBaseUrl() + "/jobs/?limit=" + pageSize + "&offset=" + offset
-                + "&custom_fields__exported=" + URLEncoder.encode("To Export", StandardCharsets.UTF_8);
-        return sendGetRequest(url, "fetching jobs to export");
+    public String listJobsPage(int page) {
+        String url = apiClient.endpoint("/jobs/?page=" + page + "&page_size=" + pageSize);
+        return apiClient.get(url, token, "fetching jobs page " + page);
     }
+
+    public List<JobExportInfo> listJobWithExportedFilter() {
+        List<JobExportInfo> result = new java.util.ArrayList<>();
+        int page = 1;
+        try {
+            while (true) {
+                String json = listJobsPage(page);
+                var root = objectMapper.readTree(json);
+                var results = root.path("results");
+
+                if (!results.isArray() || results.isEmpty()) {
+                    log.info("Jobs loader: page {} is empty, stopping", page);
+                    break;
+                }
+
+                int toExportOnPage = 0;
+                for (var job : results) {
+                    if ("To Export".equals(job.path("custom_fields").path("exported").asString(""))) {
+                        result.add(new JobExportInfo(
+                                job.path("id").asString(),
+                                job.path("position_name").asString("")));
+                        toExportOnPage++;
+                    }
+                }
+                log.info("Jobs loader: page {} returned {} job(s), {} with exported = 'To Export' (total so far: {})",
+                        page, results.size(), toExportOnPage, result.size());
+
+                if (results.size() < pageSize) {
+                    break;
+                }
+                page++;
+            }
+            log.info("Jobs loader: complete, {} job(s) with exported = 'To Export'", result.size());
+            return result;
+        } catch (RateLimitException e) {
+            throw e;
+        } catch (ApiException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error listing jobs with export filter", e);
+            throw ApiException.badGateway("Error listing jobs with export filter", e);
+        }
+    }
+
+    public record JobExportInfo(String id, String positionName) {}
 
     public String getJobById(String jobId) {
-        String url = normalizedBaseUrl() + "/jobs/" + jobId;
-        return sendGetRequest(url, "fetching Job by ID");
+        String url = apiClient.endpoint("/jobs/" + jobId);
+        return apiClient.get(url, token, "fetching Job by ID");
     }
 
     public JobTarget previewJobMigrated(String jobId) {
+        log.info("Job {}: fetching source job for preview...", jobId);
         String jobJson = getJobById(jobId);
         try {
             JobSource source = objectMapper.readValue(jobJson, JobSource.class);
 
             String notesJson = listJobNotes(jobId, 0);
-            List<JobSource.JobNote> notes = parseResultsList(notesJson, JobSource.JobNote.class);
+            List<JobSource.JobNote> notes = apiClient.parseResultsList(notesJson, JobSource.JobNote.class);
+            log.info("Job {}: source loaded (position='{}', organization={}), {} note(s) found",
+                    jobId, source.getPositionName(), source.getOrganization(), notes.size());
 
             return jobMapper.toTarget(source, notes);
         } catch (RateLimitException e) {
@@ -87,17 +119,17 @@ public class ManatalSourceJobService {
     }
 
     public String listJobNotes(String jobId, int offset) {
-        String url = normalizedBaseUrl() + "/jobs/" + jobId + "/notes/?limit=" + pageSize + "&offset=" + offset;
-        return sendGetRequest(url, "fetching notes for job " + jobId);
+        String url = apiClient.endpoint("/jobs/" + jobId + "/notes/?limit=" + pageSize + "&offset=" + offset);
+        return apiClient.get(url, token, "fetching notes for job " + jobId);
     }
 
     public List<JobContactInfo> listJobsWithContacts() {
         List<JobContactInfo> result = new java.util.ArrayList<>();
-        int offset = 0;
+        int page = 1;
         try {
             while (true) {
-                String json = listJobs(offset);
-                List<JobSource> jobs = parseResultsList(json, JobSource.class);
+                String json = listJobsPage(page);
+                List<JobSource> jobs = apiClient.parseResultsList(json, JobSource.class);
                 for (JobSource job : jobs) {
                     if (job.getCustomFields() != null
                             && job.getCustomFields().getContactName() != null
@@ -109,7 +141,7 @@ public class ManatalSourceJobService {
                     }
                 }
                 if (jobs.size() < pageSize) break;
-                offset += jobs.size();
+                page++;
             }
             return result;
         } catch (RateLimitException e) {
@@ -123,146 +155,31 @@ public class ManatalSourceJobService {
     }
 
     public void updateCustomField(String sourceJobId, String field, String value) {
-        String url = normalizedBaseUrl() + "/jobs/" + sourceJobId + "/";
-        Map<String, Object> body = Map.of("custom_fields", Map.of(field, value));
-        sendPatchRequest(url, body, "updating custom field for job " + sourceJobId);
+        String url = apiClient.endpoint("/jobs/" + sourceJobId + "/");
+        Map<String, Object> customFields = new HashMap<>(fetchCustomFields(sourceJobId));
+        customFields.put(field, value);
+        Map<String, Object> body = Map.of("custom_fields", customFields);
+        apiClient.patch(url, body, token, "updating custom field for job " + sourceJobId);
+    }
+
+    private Map<String, Object> fetchCustomFields(String sourceJobId) {
+        try {
+            JsonNode root = objectMapper.readTree(getJobById(sourceJobId));
+            JsonNode customFields = root.path("custom_fields");
+            if (customFields.isMissingNode() || customFields.isNull()) {
+                return new HashMap<>();
+            }
+            return objectMapper.convertValue(customFields, new TypeReference<Map<String, Object>>() {});
+        } catch (RateLimitException e) {
+            throw e;
+        } catch (ApiException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error reading custom fields for job {}", sourceJobId, e);
+            throw ApiException.badGateway("Error reading custom fields for job " + sourceJobId, e);
+        }
     }
 
     public record JobContactInfo(Integer id, String positionName, String contactName) {}
-
-    // ============================= Parsing =============================
-
-    private <T> List<T> parseResultsList(String json, Class<T> elementType) throws Exception {
-        var root = objectMapper.readTree(json);
-        if (root.isArray()) {
-            return objectMapper.readerForListOf(elementType).readValue(root);
-        }
-        var results = root.get("results");
-        if (results != null) {
-            return objectMapper.readerForListOf(elementType).readValue(results);
-        }
-        return List.of();
-    }
-
-
-    // ============================= HTTP =============================
-
-    private String sendGetRequest(String url, String context) {
-        int attempt = 0;
-        while (true) {
-            try {
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(url))
-                        .header("Authorization", "Token " + token)
-                        .GET()
-                        .build();
-
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-                if (response.statusCode() == HttpStatus.OK.value()) {
-                    return response.body();
-                }
-
-                if (response.statusCode() == 429) {
-                    throw new RateLimitException(retryAfterSeconds(response));
-                }
-
-                throw apiExceptionFor(response, context);
-
-            } catch (RateLimitException e) {
-                if (++attempt >= retryLimit) throw e;
-                log.warn("Rate limited while {} (attempt {}/{}), retrying after {}s",
-                        context, attempt, retryLimit, e.getRetryAfterSeconds());
-                sleep(e.getRetryAfterSeconds());
-            } catch (ApiException e) {
-                throw e;
-            } catch (Exception e) {
-                log.error("Exception while {}", context, e);
-                throw ApiException.badGateway("Exception while " + context, e);
-            }
-        }
-    }
-
-    private void sendPatchRequest(String url, Object body, String context) {
-        int attempt = 0;
-        while (true) {
-            try {
-                String json = objectMapper.writeValueAsString(body);
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(url))
-                        .header("Authorization", "Token " + token)
-                        .header("Content-Type", "application/json")
-                        .method("PATCH", HttpRequest.BodyPublishers.ofString(json))
-                        .build();
-
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-                if (response.statusCode() == HttpStatus.OK.value() || response.statusCode() == 204) {
-                    return;
-                }
-
-                if (response.statusCode() == 429) {
-                    throw new RateLimitException(retryAfterSeconds(response));
-                }
-
-                throw apiExceptionFor(response, context);
-
-            } catch (RateLimitException e) {
-                if (++attempt >= retryLimit) throw e;
-                log.warn("Rate limited while {} (attempt {}/{}), retrying after {}s",
-                        context, attempt, retryLimit, e.getRetryAfterSeconds());
-                sleep(e.getRetryAfterSeconds());
-            } catch (ApiException e) {
-                throw e;
-            } catch (Exception e) {
-                log.error("Exception while {}", context, e);
-                throw ApiException.badGateway("Exception while " + context, e);
-            }
-        }
-    }
-
-    private ApiException apiExceptionFor(HttpResponse<String> response, String context) {
-        int code = response.statusCode();
-        String body = response.body();
-        log.error("Error {}: HTTP {} - {}", context, code, body);
-
-        HttpStatus status = HttpStatus.resolve(code);
-        if (status == null) {
-            return new ApiException(HttpStatus.BAD_GATEWAY,
-                    "Unexpected HTTP " + code + " while " + context + ": " + body);
-        }
-        if (status.is4xxClientError()) {
-            return new NonRetryableApiException(status, body);
-        }
-        return new ApiException(status, body);
-    }
-
-    private long retryAfterSeconds(HttpResponse<?> response) {
-        var headers = response.headers();
-        if (headers != null) {
-            var retryAfter = headers.firstValue("Retry-After").orElse(null);
-            if (retryAfter != null) {
-                try {
-                    return Long.parseLong(retryAfter);
-                } catch (NumberFormatException e) {
-                    log.warn("Could not parse Retry-After header value '{}', using default", retryAfter);
-                }
-            }
-        }
-        return rateLimitRetrySeconds;
-    }
-
-    private void sleep(long seconds) {
-        try {
-            Thread.sleep(seconds * 1000L);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw ApiException.badGateway("Interrupted while waiting for rate limit", e);
-        }
-    }
-
-    private String normalizedBaseUrl() {
-        return baseUrl.replaceAll("/+$", "");
-    }
 
 }

@@ -113,6 +113,95 @@ class ClientMigrationWriterTest {
     }
 
     @Test
+    void shouldPostNoteToContactNoteWhenNoteBelongsToContact() throws Exception {
+        var entity = new ClientMigration();
+        entity.setSourceOrganizationId("42");
+        entity.setStatus("PENDENTE");
+
+        var target = new ClientTarget();
+        target.setClientName("Acme Corp");
+        var contact = new ClientTarget.ContactTarget();
+        contact.setFullName("John Doe");
+        contact.setSourceContactId(100L);
+        target.setContacts(List.of(contact));
+        var note = new ClientTarget.TargetNote();
+        note.setContent("hello");
+        note.setContactId(100L);
+        target.setNotes(List.of(note));
+
+        var pkg = new ClientMigrationPackage();
+        pkg.setEntity(entity);
+        pkg.setTransformed(target);
+
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(targetService.migrateOrganization(target)).thenReturn("{\"id\": 55}");
+        when(targetService.createContact(contact)).thenReturn("{\"id\": 7}");
+
+        writer.write(new Chunk<>(pkg));
+
+        verify(targetService).createContact(contact);
+        verify(targetService).createContactNote(7L, "hello");
+        verify(targetService, never()).createOrganizationNote(anyInt(), anyString());
+    }
+
+    @Test
+    void shouldPrefixNoteContentWithAuthorName() throws Exception {
+        var entity = new ClientMigration();
+        entity.setSourceOrganizationId("42");
+        entity.setStatus("PENDENTE");
+
+        var target = new ClientTarget();
+        target.setClientName("Acme Corp");
+        var note = new ClientTarget.TargetNote();
+        note.setContent("Cliente contactado em 30/07");
+        note.setCreatorName("Maria Silva");
+        target.setNotes(List.of(note));
+
+        var pkg = new ClientMigrationPackage();
+        pkg.setEntity(entity);
+        pkg.setTransformed(target);
+
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(targetService.migrateOrganization(target)).thenReturn("{\"id\": 55}");
+
+        writer.write(new Chunk<>(pkg));
+
+        verify(targetService).createOrganizationNote(55, "Maria Silva: Cliente contactado em 30/07");
+    }
+
+    @Test
+    void shouldFallbackToOrganizationNoteWhenContactCreationFailed() throws Exception {
+        var entity = new ClientMigration();
+        entity.setSourceOrganizationId("42");
+        entity.setStatus("PENDENTE");
+
+        var target = new ClientTarget();
+        target.setClientName("Acme Corp");
+        var contact = new ClientTarget.ContactTarget();
+        contact.setFullName("John Doe");
+        contact.setSourceContactId(100L);
+        target.setContacts(List.of(contact));
+        var note = new ClientTarget.TargetNote();
+        note.setContent("hello");
+        note.setContactId(100L);
+        target.setNotes(List.of(note));
+
+        var pkg = new ClientMigrationPackage();
+        pkg.setEntity(entity);
+        pkg.setTransformed(target);
+
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(targetService.migrateOrganization(target)).thenReturn("{\"id\": 55}");
+        doThrow(new RuntimeException("contact error")).when(targetService).createContact(any());
+
+        writer.write(new Chunk<>(pkg));
+
+        verify(targetService, never()).createContactNote(anyLong(), anyString());
+        verify(targetService).createOrganizationNote(55, "hello");
+        assertEquals("SUCESSO", entity.getStatus());
+    }
+
+    @Test
     void shouldMarkErroWhenTargetFails() throws Exception {
         var entity = new ClientMigration();
         entity.setSourceOrganizationId("42");
@@ -151,5 +240,22 @@ class ClientMigrationWriterTest {
         verify(repository).save(entityCaptor.capture());
         assertEquals("ERRO", entityCaptor.getValue().getStatus());
         assertEquals("previous error", entityCaptor.getValue().getErrorMessage());
+    }
+
+    @Test
+    void shouldSkipItemAlreadyMigratedInDb() throws Exception {
+        var entity = new ClientMigration();
+        entity.setSourceOrganizationId("42");
+        entity.setTargetOrganizationId(55L);
+        entity.setStatus("SUCESSO");
+
+        var pkg = new ClientMigrationPackage();
+        pkg.setEntity(entity);
+
+        writer.write(new Chunk<>(pkg));
+
+        verify(targetService, never()).migrateOrganization(any());
+        verify(sourceService, never()).updateCustomField(anyString(), anyString(), anyString());
+        verify(repository, never()).save(any());
     }
 }

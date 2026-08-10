@@ -11,4 +11,5 @@ import java.util.Optional;
 public interface JobMigrationRepository extends JpaRepository<JobMigration, Long> {
     Optional<JobMigration> findBySourceJobId(String sourceJobId);
     List<JobMigration> findByStatus(String status);
+    long countByStatus(String status);
 }

@@ -21,18 +21,26 @@ public class ClientMigrationProcessor implements ItemProcessor<ClientMigration, 
 
     public ClientMigrationPackage process(ClientMigration item) {
         if (!"PENDENTE".equals(item.getStatus())) {
+            log.info("Skipping client {} ({}) — status is {} (not PENDENTE)",
+                    item.getSourceOrganizationId(), item.getSourceName(), item.getStatus());
             return null;
         }
+        log.info("Processing client {} ({})", item.getSourceOrganizationId(), item.getSourceName());
         ClientMigrationPackage pkg = new ClientMigrationPackage();
         pkg.setEntity(item);
         try {
             ClientTarget target = sourceClientService.previewClientMigrated(item.getSourceOrganizationId());
             pkg.setTransformed(target);
+            log.info("Client {} preview OK: {} contact(s), {} note(s)",
+                    item.getSourceOrganizationId(),
+                    target.getContacts() == null ? 0 : target.getContacts().size(),
+                    target.getNotes() == null ? 0 : target.getNotes().size());
             return pkg;
         } catch (RateLimitException e) {
             throw e;
         } catch (ApiException e) {
             if (e.isRetryable()) {
+                log.warn("Client {} preview retryable error (will retry): {}", item.getSourceOrganizationId(), e.getMessage());
                 throw e;
             }
             log.error("Error processing client {}: {}", item.getSourceOrganizationId(), e.getMessage());

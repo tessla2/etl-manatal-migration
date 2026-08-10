@@ -4,11 +4,14 @@ import com.migration.manatal.config.OwnerMappingProperties;
 import com.migration.manatal.exception.ApiException;
 import com.migration.manatal.exception.RateLimitException;
 import com.migration.manatal.model.job.JobTarget;
+import com.migration.manatal.service.ManatalApiClient;
 import com.migration.manatal.transform.OwnerMapper;
 import com.migration.manatal.transform.JobMapper;
+import com.migration.manatal.transform.IndustryMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import tools.jackson.databind.ObjectMapper;
@@ -36,16 +39,22 @@ class ManatalSourceJobServiceTest {
     @Mock
     private JobMapper jobMapper;
 
+    @Mock
+    private IndustryMapper industryMapper;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private ManatalSourceJobService service;
 
+    private ManatalApiClient apiClient;
+
     @BeforeEach
     void setUp() throws Exception {
-        service = new ManatalSourceJobService(httpClient, objectMapper, jobMapper);
-        setField("baseUrl", "https://api.manatal.com/open/v3/");
+        apiClient = new ManatalApiClient(httpClient, objectMapper);
+        setClientField("baseUrl", "https://api.manatal.com/open/v3/");
+        setClientField("rateLimitRetrySeconds", 60);
+        service = new ManatalSourceJobService(objectMapper, jobMapper, apiClient);
         setField("token", "test-source-token");
-        setField("rateLimitRetrySeconds", 60);
     }
 
     @Test
@@ -113,10 +122,10 @@ class ManatalSourceJobServiceTest {
     void shouldPreviewFullJobWithNotes() throws Exception {
         OwnerMappingProperties props = new OwnerMappingProperties();
         props.setOwnerMapping(new HashMap<>(Map.of(810676, 1234)));
-        service = new ManatalSourceJobService(httpClient, objectMapper, new JobMapper(new OwnerMapper(props)));
-        setField("baseUrl", "https://api.manatal.com/open/v3/");
+        when(industryMapper.resolve("Accounting / Audit / Tax Services")).thenReturn(777);
+        service = new ManatalSourceJobService(objectMapper,
+                new JobMapper(new OwnerMapper(props), industryMapper), apiClient);
         setField("token", "test-source-token");
-        setField("rateLimitRetrySeconds", 60);
 
         String jobJson = """
                 {
@@ -130,13 +139,13 @@ class ManatalSourceJobServiceTest {
                   "is_remote": true,
                   "status": "active",
                   "custom_fields": {
-                    "rate": "teste",
+                    "clientrate": "<p>teste</p>",
                     "costday": 1,
                     "rateday": 1,
-                    "category": ["Full Stack Developer"],
+                    "categoy": ["Full Stack Developer"],
                     "portugus": ["Obrigatório"],
                     "inherited": true,
-                    "workplace": "Remote",
+                    "jobmodel": "Remote",
                     "atualstatus": "teste",
                     "contactname": "4796484",
                     "grossmargin": 1,
@@ -156,7 +165,9 @@ class ManatalSourceJobServiceTest {
                     "firstjobclosedinclient": true,
                     "experiencelevelofficial": ["Middle"],
                     "replacepreviousposition": false,
-                    "jobadditionalinformation": "<p>teste</p>"
+                    "jobmodeldetails": "<p>teste</p>",
+                    "projectnotes": "<p>Project notes</p>",
+                    "lostreason": "Closed with another consultancy"
                   },
                   "industry": { "id": 384181, "name": "Accounting / Audit / Tax Services" },
                   "city": "Almada",
@@ -189,7 +200,7 @@ class ManatalSourceJobServiceTest {
         assertEquals("Portugal", target.getCountry());
         assertEquals("2026-06-26", target.getOpenAt());
         assertEquals("2026-07-06", target.getCloseAt());
-        assertEquals(384181, target.getIndustry());
+        assertEquals(777, target.getIndustry());
         assertEquals(Boolean.TRUE, target.getIsRemote());
 
         JobTarget.JobCustomFields custom = target.getCustomFields();
@@ -199,9 +210,12 @@ class ManatalSourceJobServiceTest {
         assertEquals(List.of("Obrigatório"), custom.getPortugus());
         assertEquals("Remote", custom.getWorkplace());
         assertEquals(List.of("Almada"), custom.getOfficeLocation());
-        assertEquals(List.of("Middle"), custom.getExperienceLevelOfficial());
+        assertEquals(List.of("Middle"), custom.getExperienceLevel());
         assertEquals("4796484", custom.getContactName());
         assertEquals(1, custom.getGrossMargin());
+        assertEquals("<p>teste</p>", custom.getJobAdditionalInformation());
+        assertEquals("<p>Project notes</p>", custom.getProjectNotes());
+        assertEquals("Closed with another consultancy", custom.getLostReason());
 
         assertNotNull(target.getNotes());
         assertEquals(2, target.getNotes().size());
@@ -239,6 +253,13 @@ class ManatalSourceJobServiceTest {
         assertEquals("4796484", result.get(0).contactName());
         assertEquals(3, result.get(1).id());
         assertEquals("PM", result.get(1).positionName());
+
+        ArgumentCaptor<HttpRequest> requestCaptor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(httpClient, times(2)).send(requestCaptor.capture(), any(HttpResponse.BodyHandler.class));
+        var uris = requestCaptor.getAllValues().stream().map(r -> r.uri().toString()).toList();
+        assertTrue(uris.get(0).contains("page=1&page_size=2"));
+        assertTrue(uris.get(1).contains("page=2&page_size=2"));
+        assertFalse(uris.get(0).contains("offset"));
     }
 
     private HttpResponse<String> response(int code, String body) {
@@ -259,5 +280,11 @@ class ManatalSourceJobServiceTest {
         var field = ManatalSourceJobService.class.getDeclaredField(name);
         field.setAccessible(true);
         field.set(service, value);
+    }
+
+    private void setClientField(String name, Object value) throws Exception {
+        var field = ManatalApiClient.class.getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(apiClient, value);
     }
 }

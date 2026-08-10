@@ -11,4 +11,5 @@ import java.util.Optional;
 public interface ClientMigrationRepository extends JpaRepository<ClientMigration, Long> {
     Optional<ClientMigration> findBySourceOrganizationId(String sourceOrganizationId);
     List<ClientMigration> findByStatus(String status);
+    long countByStatus(String status);
 }

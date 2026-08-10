@@ -1,0 +1,37 @@
+spring:
+  output:
+    ansi:
+      enabled: ALWAYS
+  datasource:
+    url: jdbc:h2:mem:migration;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    defer-datasource-initialization: true
+  batch:
+    jdbc:
+      initialize-schema: always
+    job:
+      enabled: false
+
+logging:
+  level:
+    com.migration: DEBUG
+
+migration:
+  batch:
+    chunk-size: 1
+    retry-limit: 3
+    skip-limit: 100
+  manatal:
+    rate-limit-retry-seconds: 1
+  security:
+    jwt-secret: test-only-jwt-secret-0123456789abcdefghijklmnop

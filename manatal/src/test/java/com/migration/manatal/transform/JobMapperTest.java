@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class JobMapperTest {
 
@@ -18,7 +20,7 @@ class JobMapperTest {
 
     @BeforeEach
     void setUp() {
-        mapper = new JobMapper(ownerMapper(Map.of()));
+        mapper = new JobMapper(ownerMapper(Map.of()), industryMapper());
     }
 
     @Test
@@ -41,8 +43,12 @@ class JobMapperTest {
         JobSource.JobCustomFields custom = new JobSource.JobCustomFields();
         custom.setExperienceLevelOfficial(List.of("Middle"));
         custom.setEnglishLevel("Beginner (A1,A2)");
-        custom.setWorkplace("Remote");
+        custom.setJobModel("Remote");
         custom.setTechnicalSkill(List.of("2D - Drawings", "1st Line"));
+        custom.setTechnologies(List.of("Python"));
+        custom.setStartDateJob("2026-08-03T00:00");
+        custom.setStartDateSyffer("2026-08-04T00:00");
+        custom.setStartDateOportunity("2026-08-11T00:00");
         source.setCustomFields(custom);
 
         JobTarget target = mapper.toTarget(source);
@@ -55,14 +61,34 @@ class JobMapperTest {
         assertEquals("full_time", target.getContractDetails());
         assertEquals("Almada", target.getCity());
         assertEquals("Portugal", target.getCountry());
+        assertEquals("EUR", target.getCurrency());
         assertEquals("2026-06-26", target.getOpenAt());
         assertEquals("2026-07-06", target.getCloseAt());
-        assertEquals(384181, target.getIndustry());
+        assertEquals(555, target.getIndustry());
+        assertEquals(List.of("Middle"), target.getCustomFields().getExperienceLevel());
+        assertEquals(List.of("2D - Drawings", "1st Line"), target.getCustomFields().getMandatorySkills());
+        assertEquals("Python", target.getCustomFields().getSkillNotes());
+        assertEquals("2026-08-11T00:00", target.getCustomFields().getStartDateJob());
+        assertEquals("2026-08-04T00:00", target.getCustomFields().getStartDateSyffer());
+    }
+
+    @Test
+    void shouldJoinTechnologiesIntoSkillNotes() {
+        JobSource.JobCustomFields custom = new JobSource.JobCustomFields();
+        custom.setTechnologies(List.of("Python", "Java"));
+
+        JobSource source = new JobSource();
+        source.setCustomFields(custom);
+
+        JobTarget target = mapper.toTarget(source);
+
+        assertNull(target.getCustomFields().getMandatorySkills());
+        assertEquals("Python, Java", target.getCustomFields().getSkillNotes());
     }
 
     @Test
     void shouldMapOwnerViaOwnerMapper() {
-        mapper = new JobMapper(ownerMapper(Map.of(810676, 1234)));
+        mapper = new JobMapper(ownerMapper(Map.of(810676, 1234)), industryMapper());
         JobSource source = new JobSource();
         source.setOwner(810676);
 
@@ -75,13 +101,17 @@ class JobMapperTest {
     void shouldSetFixedBusinessUnitAndMapCustomFields() {
         JobSource.JobCustomFields custom = new JobSource.JobCustomFields();
         custom.setBusinessUnit("PT -  IT");
-        custom.setRate("teste");
+        custom.setClientRate("<p>teste</p>");
         custom.setCategory(List.of("Full Stack Developer"));
         custom.setPortugus(List.of("Obrigatório"));
         custom.setOfficeLocation(List.of("Almada"));
         custom.setGrossMargin(1);
         custom.setConsultantName("Teste");
         custom.setContactName("4796484");
+        custom.setJobModelDetails("Detalhe adicional");
+        custom.setProjectNotes("<p>Notas do projeto</p>");
+        custom.setTechnologies(List.of("Python", "SQL"));
+        custom.setLostReason("Closed with another consultancy");
 
         JobSource source = new JobSource();
         source.setCustomFields(custom);
@@ -98,6 +128,10 @@ class JobMapperTest {
         assertEquals(1, mapped.getGrossMargin());
         assertEquals("Teste", mapped.getConsultantName());
         assertEquals("4796484", mapped.getContactName());
+        assertEquals("Detalhe adicional", mapped.getJobAdditionalInformation());
+        assertEquals("<p>Notas do projeto</p>", mapped.getProjectNotes());
+        assertEquals("Python, SQL", mapped.getSkillNotes());
+        assertEquals("Closed with another consultancy", mapped.getLostReason());
     }
 
     @Test
@@ -114,9 +148,32 @@ class JobMapperTest {
         assertEquals("PT - IT", target.getCustomFields().getBusinessUnit());
     }
 
+    @Test
+    void shouldLeaveIndustryEmptyWhenNotFoundInTarget() {
+        IndustryMapper industryMapper = mock(IndustryMapper.class);
+        when(industryMapper.resolve("Accounting / Audit / Tax Services")).thenReturn(null);
+        mapper = new JobMapper(ownerMapper(Map.of()), industryMapper);
+
+        JobSource source = new JobSource();
+        JobSource.Industry industry = new JobSource.Industry();
+        industry.setId(384181);
+        industry.setName("Accounting / Audit / Tax Services");
+        source.setIndustry(industry);
+
+        JobTarget target = mapper.toTarget(source);
+
+        assertNull(target.getIndustry());
+    }
+
     private OwnerMapper ownerMapper(Map<Integer, Integer> mapping) {
         OwnerMappingProperties properties = new OwnerMappingProperties();
         properties.setOwnerMapping(new HashMap<>(mapping));
         return new OwnerMapper(properties);
+    }
+
+    private IndustryMapper industryMapper() {
+        IndustryMapper industryMapper = mock(IndustryMapper.class);
+        when(industryMapper.resolve("Accounting / Audit / Tax Services")).thenReturn(555);
+        return industryMapper;
     }
 }

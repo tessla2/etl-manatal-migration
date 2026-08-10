@@ -2,6 +2,7 @@ package com.migration.manatal.service.client;
 
 import com.migration.manatal.exception.ApiException;
 import com.migration.manatal.model.client.ClientTarget;
+import com.migration.manatal.service.ManatalApiClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,14 +29,18 @@ class ManatalTargetClientServiceTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    private ManatalApiClient apiClient;
+
     private ManatalTargetClientService service;
 
     @BeforeEach
     void setUp() throws Exception {
-        service = new ManatalTargetClientService(httpClient, objectMapper);
-        var baseUrlField = ManatalTargetClientService.class.getDeclaredField("baseUrl");
+        apiClient = new ManatalApiClient(httpClient, objectMapper);
+        var baseUrlField = ManatalApiClient.class.getDeclaredField("baseUrl");
         baseUrlField.setAccessible(true);
-        baseUrlField.set(service, "https://api.manatal.com/open/v3/");
+        baseUrlField.set(apiClient, "https://api.manatal.com/open/v3/");
+
+        service = new ManatalTargetClientService(apiClient);
 
         var tokenField = ManatalTargetClientService.class.getDeclaredField("targetToken");
         tokenField.setAccessible(true);
@@ -108,6 +113,18 @@ class ManatalTargetClientServiceTest {
         var result = service.createOrganizationNote(42, "hello note");
 
         assertEquals("{\"id\": 99}", result);
+    }
+
+    @Test
+    void shouldCreateContactNote() throws Exception {
+        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(httpResponse);
+        when(httpResponse.statusCode()).thenReturn(201);
+        when(httpResponse.body()).thenReturn("{\"id\": 98}");
+
+        var result = service.createContactNote(7L, "hello note");
+
+        assertEquals("{\"id\": 98}", result);
     }
 
     @Test

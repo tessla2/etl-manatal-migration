@@ -1,10 +1,12 @@
 package com.migration.manatal.controller.batch;
 
 import com.migration.manatal.service.batch.BatchService;
+import com.migration.manatal.service.batch.ReportService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -13,6 +15,7 @@ import java.util.Map;
 public class BatchController {
 
     private final BatchService batchService;
+    private final ReportService reportService;
 
     @PostMapping("/start/{type}")
     public ResponseEntity<Map<String, Object>> startJob(@PathVariable String type) {
@@ -30,5 +33,16 @@ public class BatchController {
                 "executionId", executionId,
                 "summary", summary
         ));
+    }
+
+    @GetMapping("/report")
+    public ResponseEntity<Map<String, Object>> getReport() {
+        return ResponseEntity.ok(reportService.generateSummary());
+    }
+
+    @GetMapping("/errors")
+    public ResponseEntity<List<Map<String, Object>>> getErrors(
+            @RequestParam(defaultValue = "50") int limit) {
+        return ResponseEntity.ok(reportService.listErrors(limit));
     }
 }

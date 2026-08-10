@@ -62,20 +62,20 @@ public class JobSource {
     @Data
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class JobCustomFields {
-        @JsonProperty("rate")
-        private String rate;
+        @JsonProperty("clientrate")
+        private String clientRate;
         @JsonProperty("costday")
         private Integer costDay;
         @JsonProperty("rateday")
         private Integer rateDay;
-        @JsonProperty("category")
+        @JsonProperty("categoy")
         private List<String> category;
         @JsonProperty("portugus")
         private List<String> portugus;
         @JsonProperty("inherited")
         private Boolean inherited;
-        @JsonProperty("workplace")
-        private String workplace;
+        @JsonProperty("jobmodel")
+        private String jobModel;
         @JsonProperty("atualstatus")
         private String atualStatus;
         @JsonProperty("contactname")
@@ -104,6 +104,10 @@ public class JobSource {
         private List<String> officeLocation;
         @JsonProperty("technicalskill")
         private List<String> technicalSkill;
+        @JsonProperty("technologies")
+        private List<String> technologies;
+        @JsonProperty("startdateoportunity")
+        private String startDateOportunity;
         @JsonProperty("internalization")
         private String internalization;
         @JsonProperty("startdatesyffer")
@@ -116,8 +120,12 @@ public class JobSource {
         private List<String> experienceLevelOfficial;
         @JsonProperty("replacepreviousposition")
         private Boolean replacePreviousPosition;
-        @JsonProperty("jobadditionalinformation")
-        private String jobAdditionalInformation;
+        @JsonProperty("jobmodeldetails")
+        private String jobModelDetails;
+        @JsonProperty("projectnotes")
+        private String projectNotes;
+        @JsonProperty("lostreason")
+        private String lostReason;
     }
 
     @Data

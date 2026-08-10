@@ -3,6 +3,7 @@ package com.migration.manatal.batch.migration.client;
 import com.migration.manatal.entity.client.ClientMigration;
 import com.migration.manatal.repository.client.ClientMigrationRepository;
 import com.migration.manatal.service.client.ManatalSourceClientService;
+import com.migration.manatal.service.client.ManatalSourceClientService.OrganizationExportInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -10,12 +11,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import tools.jackson.databind.ObjectMapper;
 
+import java.util.List;
 import java.util.Optional;
-
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -33,24 +31,18 @@ class LoadClientsTaskletTest {
     @Captor
     private ArgumentCaptor<ClientMigration> entityCaptor;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
-
     private LoadClientsTasklet tasklet;
 
     @BeforeEach
     void setUp() {
-        tasklet = new LoadClientsTasklet(sourceService, repository, objectMapper);
+        tasklet = new LoadClientsTasklet(sourceService, repository);
     }
 
     @Test
     void shouldLoadNewClients() throws Exception {
-        var json = """
-                {"results": [
-                  {"id": 1, "name": "Acme Corp"},
-                  {"id": 2, "name": "Beta Inc"}
-                ]}
-                """;
-        when(sourceService.listOrganizationsWithExportFilter(0)).thenReturn(json);
+        when(sourceService.listOrganizationsWithExportFilter()).thenReturn(List.of(
+                new OrganizationExportInfo("1", "Acme Corp"),
+                new OrganizationExportInfo("2", "Beta Inc")));
         when(repository.findBySourceOrganizationId(any())).thenReturn(Optional.empty());
 
         var result = tasklet.execute(null, null);
@@ -68,12 +60,8 @@ class LoadClientsTaskletTest {
 
     @Test
     void shouldSkipExistingClients() throws Exception {
-        var json = """
-                {"results": [
-                  {"id": "1", "name": "Acme Corp"}
-                ]}
-                """;
-        when(sourceService.listOrganizationsWithExportFilter(0)).thenReturn(json);
+        when(sourceService.listOrganizationsWithExportFilter()).thenReturn(List.of(
+                new OrganizationExportInfo("1", "Acme Corp")));
         var existing = new ClientMigration();
         existing.setSourceOrganizationId("1");
         when(repository.findBySourceOrganizationId("1")).thenReturn(Optional.of(existing));
@@ -84,46 +72,27 @@ class LoadClientsTaskletTest {
     }
 
     @Test
+    void shouldLoadOnlyNewClientsWhenMixExists() throws Exception {
+        when(sourceService.listOrganizationsWithExportFilter()).thenReturn(List.of(
+                new OrganizationExportInfo("1", "Acme Corp"),
+                new OrganizationExportInfo("2", "Beta Inc")));
+        var existing = new ClientMigration();
+        existing.setSourceOrganizationId("1");
+        when(repository.findBySourceOrganizationId("1")).thenReturn(Optional.of(existing));
+        when(repository.findBySourceOrganizationId("2")).thenReturn(Optional.empty());
+
+        tasklet.execute(null, null);
+
+        verify(repository, times(1)).save(entityCaptor.capture());
+        assertEquals("2", entityCaptor.getValue().getSourceOrganizationId());
+    }
+
+    @Test
     void shouldStopWhenEmptyResults() throws Exception {
-        var json = """ 
-                {"results": []}
-                """;
-        when(sourceService.listOrganizationsWithExportFilter(0)).thenReturn(json);
+        when(sourceService.listOrganizationsWithExportFilter()).thenReturn(List.of());
 
         tasklet.execute(null, null);
 
         verify(repository, never()).save(any());
-    }
-
-    @Test
-    void shouldHandlePagination() throws Exception {
-        when(sourceService.listOrganizationsWithExportFilter(anyInt()))
-                .thenAnswer(invocation -> {
-                    int offset = invocation.getArgument(0);
-                    if (offset == 0) return jsonWithNResults(100, 0);
-                    if (offset == 100) return jsonWithNResults(50, 100);
-                    return """
-                            {"results": []}
-                            """;
-                });
-        when(repository.findBySourceOrganizationId(any())).thenReturn(Optional.empty());
-
-        tasklet.execute(null, null);
-
-        verify(sourceService).listOrganizationsWithExportFilter(0);
-        verify(sourceService).listOrganizationsWithExportFilter(100);
-        verify(sourceService, never()).listOrganizationsWithExportFilter(200);
-        verify(repository, times(150)).save(any());
-    }
-
-    private String jsonWithNResults(int count, int startId) {
-        var items = IntStream.range(0, count)
-                .mapToObj(i -> """
-                        {"id": "%d", "name": "Org %d"}
-                        """.formatted(startId + i, startId + i))
-                .collect(Collectors.joining(",\n"));
-        return """
-                {"results": [%s]}
-                """.formatted(items);
     }
 }

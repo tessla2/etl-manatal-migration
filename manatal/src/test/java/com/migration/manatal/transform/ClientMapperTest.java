@@ -4,6 +4,7 @@ import com.migration.manatal.model.client.ClientSource;
 import com.migration.manatal.model.client.ClientTarget;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -45,5 +46,20 @@ class ClientMapperTest {
         assertNotNull(target);
         assertNull(target.getClientName());
         assertNull(target.getClientLocation());
+    }
+
+    @Test
+    void shouldCarryCreatorNameToTargetNote() {
+        ClientSource source = new ClientSource();
+        ClientSource.SourceNote sourceNote = new ClientSource.SourceNote();
+        sourceNote.setContent("Cliente contactado em 30/07");
+        sourceNote.setCreatorName("Maria Silva");
+        sourceNote.setCreator(5);
+
+        ClientTarget target = mapper.toTarget(source, List.of(), List.of(sourceNote));
+
+        assertEquals(1, target.getNotes().size());
+        assertEquals("Maria Silva", target.getNotes().get(0).getCreatorName());
+        assertEquals("Cliente contactado em 30/07", target.getNotes().get(0).getContent());
     }
 }

@@ -163,4 +163,21 @@ class JobMigrationWriterTest {
         assertEquals("ERRO", entityCaptor.getValue().getStatus());
         assertEquals("previous error", entityCaptor.getValue().getErrorMessage());
     }
+
+    @Test
+    void shouldSkipItemAlreadyMigratedInDb() throws Exception {
+        var entity = new JobMigration();
+        entity.setSourceJobId("42");
+        entity.setTargetJobId(55L);
+        entity.setStatus("SUCESSO");
+
+        var pkg = new JobMigrationPackage();
+        pkg.setEntity(entity);
+
+        writer.write(new Chunk<>(pkg));
+
+        verify(targetService, never()).migrateJob(any());
+        verify(sourceService, never()).updateCustomField(anyString(), anyString(), anyString());
+        verify(repository, never()).save(any());
+    }
 }

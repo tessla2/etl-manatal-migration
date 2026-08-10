@@ -14,4 +14,8 @@ public class OwnerMappingProperties {
 
     private Map<Integer, Integer> ownerMapping = new HashMap<>();
 
+    private Map<Integer, String> creatorNameMapping = new HashMap<>();
+
+    private Map<String, String> stageMapping = new HashMap<>();
+
 }
